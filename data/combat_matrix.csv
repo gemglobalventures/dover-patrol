@@ -1,0 +1,16 @@
+attacker,10,9,8,7,6,5,4,3,2,1,ML,MS,SUB,FB,MI
+10,both_sunk,10,10,10,10,10,10,10,10,10,ML,10,SS,no_effect,MI
+9,10,both_sunk,9,9,9,9,9,9,9,9,ML,9,SS,no_effect,MI
+8,10,9,both_sunk,8,8,8,8,8,8,8,ML,8,SS,no_effect,MI
+7,10,9,8,both_sunk,7,7,7,7,7,7,ML,7,SS,no_effect,MI
+6,10,9,8,7,both_sunk,6,6,6,6,6,ML,6,SS,no_effect,MI
+5,10,9,8,7,6,both_sunk,5,5,5,5,ML,5,SS,no_effect,MI
+4,10,9,8,7,6,5,both_sunk,4,4,4,4,4,SS,4,MI
+3,10,9,8,7,6,5,4,both_sunk,3,3,ML,3,SS,no_effect,MI
+2,10,9,8,7,6,5,4,3,both_sunk,2,ML,2,SS,2,MI
+1,10,9,8,7,6,5,4,3,2,both_sunk,ML,1,SS,no_effect,MI
+ML,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack
+MS,10,9,8,7,6,5,4,3,2,1,no_effect,no_effect,no_effect,no_effect,MS
+SS,SS,SS,SS,SS,SS,SS,SS,SS,2,SS,no_effect,SS,no_effect,no_effect,MI
+FB,no_effect,no_effect,no_effect,no_effect,no_effect,no_effect,4,no_effect,2,no_effect,no_effect,no_effect,no_effect,no_effect,no_effect
+MI,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack,cannot_attack
