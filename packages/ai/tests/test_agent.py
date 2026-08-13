@@ -107,3 +107,29 @@ def test_ai_vs_ai_short_game_runs_clean():
         state, events = apply_action(state, action)
         moved |= {e.piece_id for e in events if isinstance(e, Moved)}
     assert state.winner is not None or _ == 199
+
+
+def test_agent_does_not_repeat_futile_attack():
+    """A no-effect attack (e.g. submarine vs submarine) must not be repeated:
+    combat is deterministic, so a pair that both survived is futile forever.
+    With recall=0 the bot cannot remember the reveal, so only its own memory
+    of having tried the attack can stop the loop."""
+    from dover_engine.engine import apply_action
+
+    state = mk_state(
+        [
+            ("b0", T.SUBMARINE, B, (3, 4)),
+            ("a0", T.SUBMARINE, A, (3, 3)),
+            ("b1", T.PATROL_VESSEL, B, (6, 8)),
+            ("a1", T.PATROL_VESSEL, A, (0, 5)),
+        ],
+        mode="full",
+        to_move=B,
+    )
+    agent = Agent(B, samples=6, depth=2, recall=0.0, seed=9)
+    first = agent.choose(state, moved_ids={"a0", "a1"})
+    assert first == Attack("b0", (3, 3)), "the forgetful bot should take the bait once"
+    state, _ = apply_action(state, first)  # no effect: both submarines remain
+    state, _ = apply_action(state, Move("a1", (0, 6)))
+    second = agent.choose(state, moved_ids={"a0", "a1"})
+    assert second != first

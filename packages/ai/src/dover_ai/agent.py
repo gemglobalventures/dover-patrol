@@ -3,7 +3,7 @@ from __future__ import annotations
 import random
 from collections import Counter, defaultdict
 
-from dover_engine.actions import Action
+from dover_engine.actions import Action, Attack, Move
 from dover_engine.engine import legal_actions
 from dover_engine.state import GameState
 from dover_engine.types import Player
@@ -25,6 +25,37 @@ class Agent:
         self.recall = recall
         self.seed = seed
         self.rng = random.Random(seed)
+        # Pairs this agent has already attacked. Combat is deterministic, so
+        # if both ships survived the exchange, the matchup is futile forever —
+        # even (especially) when low recall makes the bot forget the reveal.
+        self._attacked: set[tuple[str, str]] = set()
+
+    def _attack_pair(self, state: GameState, action: Action) -> tuple[str, str] | None:
+        target = (
+            action.target_square
+            if isinstance(action, Attack)
+            else action.attack if isinstance(action, Move) else None
+        )
+        if target is None:
+            return None
+        defender = state.piece_at(target)
+        if defender is None:
+            return None
+        attacker_id = action.piece_id
+        return (attacker_id, defender.id)
+
+    def _is_futile(self, state: GameState, action: Action) -> bool:
+        pair = self._attack_pair(state, action)
+        if pair is None or pair not in self._attacked:
+            return False
+        attacker = state.pieces.get(pair[0])
+        defender = state.pieces.get(pair[1])
+        return (
+            attacker is not None
+            and defender is not None
+            and attacker.square is not None
+            and defender.square is not None
+        )
 
     def choose(self, state: GameState, moved_ids: set[str]) -> Action:
         if state.to_move is not self.player:
@@ -32,7 +63,11 @@ class Agent:
         root_actions = legal_actions(state)
         if not root_actions:
             raise ValueError("no legal actions")
+        useful = [a for a in root_actions if not self._is_futile(state, a)]
+        if useful:
+            root_actions = useful
         if len(root_actions) == 1:
+            self._record(state, root_actions[0])
             return root_actions[0]
 
         knowledge = remembered_knowledge(
@@ -55,8 +90,16 @@ class Agent:
                 totals[i] += v
 
         if not votes:
+            self._record(state, root_actions[0])
             return root_actions[0]
         top = max(votes.values())
         contenders = [i for i, n in votes.items() if n == top]
         winner = max(contenders, key=lambda i: totals[i])
-        return root_actions[winner]
+        chosen = root_actions[winner]
+        self._record(state, chosen)
+        return chosen
+
+    def _record(self, state: GameState, action: Action) -> None:
+        pair = self._attack_pair(state, action)
+        if pair is not None:
+            self._attacked.add(pair)
