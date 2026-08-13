@@ -67,6 +67,7 @@ export function Board({ perspective, pieces, flags, highlights, onCellClick }: B
     <div className="board">
       {rowOrder.map((row) => (
         <div className="board-row" key={row}>
+          <div className="coord coord-rank">{row + 1}</div>
           {colOrder.map((col) => {
             const key = `${col},${row}`;
             const piece = byiSquare.get(key);
@@ -101,6 +102,14 @@ export function Board({ perspective, pieces, flags, highlights, onCellClick }: B
           })}
         </div>
       ))}
+      <div className="board-row">
+        <div className="coord coord-rank" />
+        {colOrder.map((col) => (
+          <div className="coord coord-file" key={col}>
+            {"abcdefgh"[col]}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

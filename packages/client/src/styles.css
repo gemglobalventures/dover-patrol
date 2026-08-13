@@ -148,6 +148,23 @@ button.ghost {
 .board-row {
   display: flex;
 }
+.coord {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7em;
+  opacity: 0.55;
+  user-select: none;
+}
+.coord-rank {
+  width: 20px;
+  height: 46px;
+}
+.coord-file {
+  width: 58px;
+  height: 20px;
+}
+
 .cell {
   width: 58px;
   height: 46px;
