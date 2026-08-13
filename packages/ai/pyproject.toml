@@ -1,0 +1,16 @@
+[project]
+name = "dover-ai"
+version = "0.1.0"
+description = "Dover Patrol AI — belief model + determinized search"
+requires-python = ">=3.12"
+dependencies = ["dover-engine"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
