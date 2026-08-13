@@ -39,3 +39,12 @@ VALUE: dict[PieceType, int | None] = {
     PieceType.FLYING_BOAT: None,
     PieceType.MINE: None,
 }
+
+
+class Player(Enum):
+    A = "a"  # south side, setup rows 0-4, base (0, 0)
+    B = "b"  # north side, setup rows 11-7, base (7, 11)
+
+    @property
+    def opponent(self) -> "Player":
+        return Player.B if self is Player.A else Player.A
