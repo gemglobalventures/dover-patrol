@@ -5,6 +5,7 @@ from dataclasses import replace
 from . import events as ev
 from .actions import Action, Attack, Decline, Move, RunAground, TransferFlag
 from .board import BASE, adjacent, in_bounds, neighbours, wall_blocks
+from .combat import Fate, resolve
 from .state import FlagLoc, GameState, Piece
 from .types import Player, PieceType
 
@@ -33,6 +34,10 @@ def apply_action(state: GameState, action: Action) -> tuple[GameState, list]:
         raise IllegalAction("game is over")
     if isinstance(action, Move):
         return _apply_move(state, action)
+    if isinstance(action, Attack):
+        return _apply_attack(state, action)
+    if isinstance(action, Decline):
+        return _apply_decline(state, action)
     raise IllegalAction(f"unsupported action {action!r}")
 
 
@@ -159,13 +164,19 @@ def _apply_move(state: GameState, action: Move) -> tuple[GameState, list]:
     # Passive hazards: resolved on movement, before any pickup or capture.
     died = _resolve_passive_hazards(pieces, knowledge, flags, moved, events)
 
+    new_declines: set[frozenset[str]] = set()
     if not died:
         _resolve_flag_arrival(state, pieces, flags, pieces[piece.id], events)
+        died = _resolve_move_declaration(
+            state, pieces, knowledge, flags, piece, action, events, new_declines
+        )
+    elif action.attack is not None:
+        pass  # blown up "whether it attacks or not" — the declaration is moot
 
     declined = frozenset(
         pair for pair in state.declined
         if piece.id not in pair and all(pieces[p].square is not None for p in pair)
-    )
+    ) | frozenset(new_declines)
 
     new = replace(
         state,
@@ -246,6 +257,159 @@ def _transfer_window_after_move(pieces, flags, moved_id: str, died: bool) -> fro
         if other.carrying and moved.type is not T.MINE:
             window.add((other.id, moved.id))
     return frozenset(window)
+
+
+# --- attacks ----------------------------------------------------------------
+
+
+def _attack_bar_reason(state: GameState, attacker: Piece, defender: Piece) -> str | None:
+    if attacker.type in (T.MINE_LAYER, T.MINE):
+        return f"a {attacker.type.value} may never attack"
+    if defender.owner is attacker.owner:
+        return "cannot attack your own piece"
+    if attacker.carrying and defender.carrying:
+        return "a ship carrying a Flag cannot attack the ship carrying the other one"
+    return None
+
+
+def _resolve_move_declaration(
+    state, pieces, knowledge, flags, piece: Piece, action: Move, events, new_declines
+) -> bool:
+    """Handle the simultaneous "Attack!" / "No Attack!" declaration for the
+    back-to-back contacts this move created. Returns True if the mover sank."""
+    moved = pieces[piece.id]
+    old_square = piece.square
+    contacts = [
+        other
+        for other in pieces.values()
+        if other.owner is not moved.owner
+        and other.square is not None
+        and adjacent(moved.square, other.square)
+        and not adjacent(old_square, other.square)
+    ]
+    attackable = [
+        c for c in contacts if _attack_bar_reason(state, moved, c) is None
+    ]
+
+    if action.attack is None:
+        if state.mode == "capture_base" and attackable:
+            raise IllegalAction("in the short game an attack must be declared on contact")
+        for other in attackable:
+            new_declines.add(frozenset({moved.id, other.id}))
+            events.append(ev.Declined(moved.id, other.id))
+        return False
+
+    target = next((c for c in contacts if c.square == action.attack), None)
+    if target is None:
+        raise IllegalAction("declared attack must target a piece this move came back-to-back with")
+    reason = _attack_bar_reason(state, moved, target)
+    if reason is not None:
+        raise IllegalAction(reason)
+    for other in attackable:
+        if other.id != target.id:
+            new_declines.add(frozenset({moved.id, other.id}))
+            events.append(ev.Declined(moved.id, other.id))
+    return _resolve_combat(pieces, knowledge, flags, moved, target, events)
+
+
+def _resolve_combat(pieces, knowledge, flags, attacker: Piece, defender: Piece, events) -> bool:
+    """Resolve a declared attack. Returns True if the attacker sank."""
+    attacker_fate, defender_fate = resolve(attacker.type, defender.type)
+    events.append(
+        ev.Combat(
+            attacker.id,
+            defender.id,
+            attacker.type,
+            defender.type,
+            attacker_fate,
+            defender_fate,
+        )
+    )
+    # "Immediately an attack is made both players show the pieces concerned."
+    knowledge[attacker.owner][defender.id] = defender.type
+    knowledge[defender.owner][attacker.id] = attacker.type
+
+    for piece, fate, other, other_fate in (
+        (attacker, attacker_fate, defender, defender_fate),
+        (defender, defender_fate, attacker, attacker_fate),
+    ):
+        if fate is not Fate.SUNK:
+            continue
+        pieces[piece.id] = replace(piece, square=None, carrying=frozenset())
+        for flag_owner in piece.carrying:
+            if other_fate is Fate.SUNK:
+                # Equal-value duel with a carrier: the flag drops where the
+                # escort stood, prize of the first ship of either side.
+                flags[flag_owner] = FlagLoc(square=piece.square)
+                events.append(ev.FlagDropped(flag_owner, piece.square, False))
+            else:
+                survivor = pieces[other.id]
+                pieces[other.id] = replace(
+                    survivor, carrying=survivor.carrying | {flag_owner}
+                )
+                flags[flag_owner] = FlagLoc(carrier=other.id)
+                events.append(ev.FlagCaptured(flag_owner, other.id))
+    return attacker_fate is Fate.SUNK
+
+
+def _apply_attack(state: GameState, action: Attack) -> tuple[GameState, list]:
+    attacker = _require_own_live_piece(state, action.piece_id)
+    defender = state.piece_at(action.target_square)
+    if defender is None or defender.square is None:
+        raise IllegalAction("no piece on the target square")
+    if not adjacent(attacker.square, defender.square):
+        raise IllegalAction("pieces may only attack when back to back")
+    if frozenset({attacker.id, defender.id}) in state.declined:
+        raise IllegalAction("this pair was declined; a piece must move first")
+    reason = _attack_bar_reason(state, attacker, defender)
+    if reason is not None:
+        raise IllegalAction(reason)
+
+    events: list = []
+    pieces = dict(state.pieces)
+    knowledge = {p: dict(k) for p, k in state.knowledge.items()}
+    flags = dict(state.flags)
+    _resolve_combat(pieces, knowledge, flags, attacker, defender, events)
+
+    declined = frozenset(
+        pair
+        for pair in state.declined
+        if all(pieces[p].square is not None for p in pair)
+    )
+    new = replace(
+        state,
+        pieces=pieces,
+        flags=flags,
+        knowledge=knowledge,
+        declined=declined,
+        transfer_window=frozenset(),
+        to_move=state.to_move.opponent,
+    )
+    return _finish_turn(new, events)
+
+
+def _apply_decline(state: GameState, action: Decline) -> tuple[GameState, list]:
+    if state.mode == "capture_base":
+        raise IllegalAction("attacks are compulsory in the short game")
+    attacker = _require_own_live_piece(state, action.piece_id)
+    defender = state.piece_at(action.target_square)
+    if defender is None:
+        raise IllegalAction("no piece on the target square")
+    if not adjacent(attacker.square, defender.square):
+        raise IllegalAction("pieces may only decline when back to back")
+    if frozenset({attacker.id, defender.id}) in state.declined:
+        raise IllegalAction("this pair is already declined")
+    reason = _attack_bar_reason(state, attacker, defender)
+    if reason is not None:
+        raise IllegalAction(reason)
+
+    new = replace(
+        state,
+        declined=state.declined | {frozenset({attacker.id, defender.id})},
+        transfer_window=frozenset(),
+        to_move=state.to_move.opponent,
+    )
+    return _finish_turn(new, [ev.Declined(attacker.id, defender.id)])
 
 
 # --- end-of-turn bookkeeping ------------------------------------------------

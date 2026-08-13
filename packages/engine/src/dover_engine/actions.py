@@ -9,6 +9,9 @@ from .board import Square
 class Move:
     piece_id: str
     to: Square
+    # Declared simultaneously with a move that creates back-to-back contact:
+    # the square of the enemy piece to attack, or None for "No Attack!".
+    attack: Square | None = None
 
 
 @dataclass(frozen=True)
