@@ -110,10 +110,13 @@ def test_determinize_builds_consistent_full_info_state():
 
 
 def test_mines_favour_the_back_rows():
-    """The depth prior must point at the owner's baseline: B's back row is
-    row 11, so sampled mines should land there more often than on row 9."""
+    """The depth prior must point at the owner's baseline. The helper fleet
+    occupies rows 8-10 for B, whose baseline is row 11 — so of the occupied
+    rows, the deepest (10) should collect more sampled mines than the
+    shallowest (8)."""
     spec = short_enemy_fleet()
     state = mk_state(spec)
+    assert {sq[1] for _, __, o, sq in spec if o is B} == {8, 9, 10}
     rng = random.Random(5)
     row_hits = Counter()
     for _ in range(400):
@@ -122,4 +125,4 @@ def test_mines_favour_the_back_rows():
         for pid, t in assignment.items():
             if t is T.MINE:
                 row_hits[state.pieces[pid].square[1]] += 1
-    assert row_hits[11] > row_hits[9]
+    assert row_hits[10] > row_hits[8]
