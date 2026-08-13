@@ -32,13 +32,35 @@ class IllegalAction(Exception):
 def apply_action(state: GameState, action: Action) -> tuple[GameState, list]:
     if state.winner is not None:
         raise IllegalAction("game is over")
+
+    obligated = _pieces_obliged_to_leave_base(state)
+    if obligated:
+        ok = (
+            isinstance(action, Move) and action.piece_id in obligated
+        ) or (isinstance(action, RunAground) and action.piece_id in obligated)
+        if not ok:
+            raise IllegalAction("the ship on the Base must be moved off first")
+
     if isinstance(action, Move):
         return _apply_move(state, action)
     if isinstance(action, Attack):
         return _apply_attack(state, action)
     if isinstance(action, Decline):
         return _apply_decline(state, action)
+    if isinstance(action, TransferFlag):
+        return _apply_transfer(state, action)
+    if isinstance(action, RunAground):
+        return _apply_run_aground(state, action)
     raise IllegalAction(f"unsupported action {action!r}")
+
+
+def _pieces_obliged_to_leave_base(state: GameState) -> set[str]:
+    """Ships standing on a Base at their owner's turn must sail off it."""
+    return {
+        p.id
+        for p in state.pieces.values()
+        if p.owner is state.to_move and p.square in (BASE[Player.A], BASE[Player.B])
+    }
 
 
 # --- movement ---------------------------------------------------------------
@@ -184,7 +206,10 @@ def _apply_move(state: GameState, action: Move) -> tuple[GameState, list]:
         flags=flags,
         knowledge=knowledge,
         declined=declined,
-        transfer_window=_transfer_window_after_move(pieces, flags, piece.id, died),
+        transfer_window=frozenset(
+            _window_kept_from(state, state.to_move)
+            | set(_transfer_window_after_move(pieces, flags, piece.id, died))
+        ),
         to_move=state.to_move.opponent,
     )
     return _finish_turn(new, events)
@@ -238,6 +263,16 @@ def _resolve_flag_arrival(state, pieces, flags, moved: Piece, events) -> None:
         carrying.clear()
 
     pieces[moved.id] = replace(moved, carrying=frozenset(carrying))
+
+
+def _window_kept_from(state: GameState, actor: Player) -> set[tuple[str, str]]:
+    """Window entries belong to the player whose move created them; an
+    opponent's action must not expire them."""
+    return {
+        (giver, receiver)
+        for giver, receiver in state.transfer_window
+        if state.pieces[giver].owner is not actor
+    }
 
 
 def _transfer_window_after_move(pieces, flags, moved_id: str, died: bool) -> frozenset:
@@ -382,7 +417,7 @@ def _apply_attack(state: GameState, action: Attack) -> tuple[GameState, list]:
         flags=flags,
         knowledge=knowledge,
         declined=declined,
-        transfer_window=frozenset(),
+        transfer_window=frozenset(_window_kept_from(state, state.to_move)),
         to_move=state.to_move.opponent,
     )
     return _finish_turn(new, events)
@@ -406,10 +441,223 @@ def _apply_decline(state: GameState, action: Decline) -> tuple[GameState, list]:
     new = replace(
         state,
         declined=state.declined | {frozenset({attacker.id, defender.id})},
-        transfer_window=frozenset(),
+        transfer_window=frozenset(_window_kept_from(state, state.to_move)),
         to_move=state.to_move.opponent,
     )
     return _finish_turn(new, [ev.Declined(attacker.id, defender.id)])
+
+
+# --- flag transfer and running aground --------------------------------------
+
+
+def _apply_transfer(state: GameState, action: TransferFlag) -> tuple[GameState, list]:
+    giver = _require_own_live_piece(state, action.from_piece)
+    if (action.from_piece, action.to_piece) not in state.transfer_window:
+        raise IllegalAction(
+            "a transfer must happen on the move immediately after getting into position"
+        )
+    receiver = state.pieces.get(action.to_piece)
+    if receiver is None or receiver.square is None or receiver.owner is not giver.owner:
+        raise IllegalAction("no friendly vessel to transfer to")
+    if not giver.carrying:
+        raise IllegalAction("this piece carries no flag")
+    if not adjacent(giver.square, receiver.square):
+        raise IllegalAction("the receiving vessel is no longer alongside")
+
+    pieces = dict(state.pieces)
+    flags = dict(state.flags)
+    events: list = []
+    pieces[giver.id] = replace(giver, carrying=frozenset())
+    pieces[receiver.id] = replace(receiver, carrying=receiver.carrying | giver.carrying)
+    for flag_owner in sorted(giver.carrying, key=lambda p: p.value):
+        flags[flag_owner] = FlagLoc(carrier=receiver.id)
+        events.append(ev.FlagTransferred(flag_owner, giver.id, receiver.id))
+
+    new = replace(
+        state,
+        pieces=pieces,
+        flags=flags,
+        transfer_window=frozenset(_window_kept_from(state, state.to_move)),
+        to_move=state.to_move.opponent,
+    )
+    return _finish_turn(new, events)
+
+
+def _apply_run_aground(state: GameState, action: RunAground) -> tuple[GameState, list]:
+    piece = _require_own_live_piece(state, action.piece_id)
+    if piece.square not in (BASE[Player.A], BASE[Player.B]):
+        raise IllegalAction("only a ship stuck on a Base can run aground")
+    if any(_move_would_be_legal(state, piece, to) for to in _candidate_squares(piece)):
+        raise IllegalAction("the ship can still sail off the Base")
+
+    pieces = dict(state.pieces)
+    flags = dict(state.flags)
+    events: list = [ev.RanAground(piece.id)]
+    base_square = piece.square
+    pieces[piece.id] = replace(piece, square=None, carrying=frozenset())
+    for flag_owner in sorted(piece.carrying, key=lambda p: p.value):
+        flags[flag_owner] = FlagLoc(square=base_square)
+        events.append(ev.FlagDropped(flag_owner, base_square, False))
+
+    declined = frozenset(pair for pair in state.declined if piece.id not in pair)
+    new = replace(
+        state,
+        pieces=pieces,
+        flags=flags,
+        declined=declined,
+        transfer_window=frozenset(_window_kept_from(state, state.to_move)),
+        to_move=state.to_move.opponent,
+    )
+    return _finish_turn(new, events)
+
+
+# --- legal-action existence (for run-aground and hem-in checks) -------------
+
+
+def _candidate_squares(piece: Piece) -> list:
+    squares = neighbours(piece.square)
+    if piece.type is T.FLYING_BOAT:
+        col, row = piece.square
+        squares += [
+            sq
+            for sq in [(col + 2, row), (col - 2, row), (col, row + 2), (col, row - 2)]
+            if in_bounds(sq)
+        ]
+    return squares
+
+
+def _move_would_be_legal(state: GameState, piece: Piece, to) -> bool:
+    if piece.type is T.MINE:
+        return False
+    try:
+        _validate_move_geometry(state, piece, to)
+        if _crossed_wall_edges(piece.square, to) and piece.type is not T.FLYING_BOAT:
+            return False
+        _validate_base_entry(state, piece, to)
+        _validate_flag_square_entry(state, piece, to)
+    except IllegalAction:
+        return False
+    return True
+
+
+def _has_any_legal_action(state: GameState) -> bool:
+    obligated = _pieces_obliged_to_leave_base(state)
+    if obligated:
+        return True  # move off, or failing that run aground — always playable
+    for piece in state.pieces.values():
+        if piece.owner is not state.to_move or piece.square is None:
+            continue
+        if any(_move_would_be_legal(state, piece, to) for to in _candidate_squares(piece)):
+            return True
+        for other in state.pieces.values():
+            if (
+                other.owner is piece.owner
+                or other.square is None
+                or not adjacent(piece.square, other.square)
+            ):
+                continue
+            if frozenset({piece.id, other.id}) in state.declined:
+                continue
+            if _attack_bar_reason(state, piece, other) is None:
+                return True
+    for giver_id, receiver_id in state.transfer_window:
+        giver = state.pieces[giver_id]
+        receiver = state.pieces[receiver_id]
+        if (
+            giver.owner is state.to_move
+            and giver.square is not None
+            and receiver.square is not None
+            and giver.carrying
+            and adjacent(giver.square, receiver.square)
+        ):
+            return True
+    return False
+
+
+# --- legal action generation ------------------------------------------------
+
+
+def _would_die_at(state: GameState, piece: Piece, to) -> bool:
+    for other in state.pieces.values():
+        if other.owner is piece.owner or other.square is None or other.id == piece.id:
+            continue
+        if not adjacent(to, other.square):
+            continue
+        if other.type is T.MINE and piece.type not in MINE_EXEMPT:
+            return True
+        if other.type is T.MINE_LAYER and piece.type not in MINE_LAYER_EXEMPT:
+            return True
+    return False
+
+
+def _move_actions_for(state: GameState, piece: Piece) -> list[Action]:
+    actions: list[Action] = []
+    for to in _candidate_squares(piece):
+        if not _move_would_be_legal(state, piece, to):
+            continue
+        if _would_die_at(state, piece, to):
+            actions.append(Move(piece.id, to))  # the declaration is moot
+            continue
+        contacts = [
+            other
+            for other in state.pieces.values()
+            if other.owner is not piece.owner
+            and other.square is not None
+            and adjacent(to, other.square)
+            and not adjacent(piece.square, other.square)
+        ]
+        attackable = [
+            c for c in contacts if _attack_bar_reason(state, piece, c) is None
+        ]
+        for target in attackable:
+            actions.append(Move(piece.id, to, attack=target.square))
+        if not (state.mode == "capture_base" and attackable):
+            actions.append(Move(piece.id, to))
+    return actions
+
+
+def legal_actions(state: GameState) -> list[Action]:
+    if state.winner is not None:
+        return []
+
+    obligated = _pieces_obliged_to_leave_base(state)
+    if obligated:
+        moves: list[Action] = []
+        for pid in sorted(obligated):
+            moves += _move_actions_for(state, state.pieces[pid])
+        return moves or [RunAground(pid) for pid in sorted(obligated)]
+
+    actions: list[Action] = []
+    for piece in state.pieces.values():
+        if piece.owner is not state.to_move or piece.square is None:
+            continue
+        if piece.type is not T.MINE:
+            actions += _move_actions_for(state, piece)
+        for other in state.pieces.values():
+            if (
+                other.owner is piece.owner
+                or other.square is None
+                or not adjacent(piece.square, other.square)
+            ):
+                continue
+            if frozenset({piece.id, other.id}) in state.declined:
+                continue
+            if _attack_bar_reason(state, piece, other) is None:
+                actions.append(Attack(piece.id, other.square))
+                if state.mode != "capture_base":
+                    actions.append(Decline(piece.id, other.square))
+    for giver_id, receiver_id in sorted(state.transfer_window):
+        giver = state.pieces[giver_id]
+        receiver = state.pieces[receiver_id]
+        if (
+            giver.owner is state.to_move
+            and giver.square is not None
+            and receiver.square is not None
+            and giver.carrying
+            and adjacent(giver.square, receiver.square)
+        ):
+            actions.append(TransferFlag(giver_id, receiver_id))
+    return actions
 
 
 # --- end-of-turn bookkeeping ------------------------------------------------
@@ -417,6 +665,17 @@ def _apply_decline(state: GameState, action: Decline) -> tuple[GameState, list]:
 
 def _finish_turn(state: GameState, events: list) -> tuple[GameState, list]:
     winner = _check_winner(state)
+    if winner is None and not _has_any_legal_action(state):
+        # "A player also wins if he so hems in his opponent's pieces that his
+        # opponent cannot move ... The winning player, however, must have his
+        # own Flag on his own Base, otherwise the game is drawn."
+        hemmer = state.to_move.opponent
+        if state.mode == "capture_base":
+            winner = hemmer
+        elif state.flags[hemmer].square == BASE[hemmer]:
+            winner = hemmer
+        else:
+            winner = "draw"
     if winner is not None:
         state = replace(state, winner=winner)
         events.append(ev.GameOver(winner))

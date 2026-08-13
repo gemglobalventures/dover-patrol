@@ -18,6 +18,23 @@ Note: the matrix is authoritative where DESIGN.md §4 is coarser — e.g. Mine S
 
 Passive hazards (mine / mine-layer adjacency kills) and the Flying Boat's harbour-wall and mine-jump moves are not in the matrix; see DESIGN.md §4.
 
+## Status
+
+- **`packages/engine`** — complete rules engine: pure Python, zero I/O,
+  `apply_action(state, action) -> (state, events)` plus `legal_actions(state)`.
+  Covers both modes (full game and the 24-piece "Capturing the Base" short
+  game), the full combat matrix, passive mine/mine-layer hazards, harbour
+  walls, Flying Boat specials, declined-attack tracking, per-player knowledge,
+  the flag lifecycle, and all win/draw conditions. 320+ tests including the
+  exhaustive matrix cross-check and seeded random self-play with invariant
+  checks. Rulings and deviations: [docs/IMPLEMENTATION_NOTES.md](docs/IMPLEMENTATION_NOTES.md).
+
+Run the tests:
+
+```bash
+python3 -m venv .venv && ./.venv/bin/pip install -e packages/engine pytest && ./.venv/bin/pytest packages/engine
+```
+
 ## Planned architecture
 
 ```

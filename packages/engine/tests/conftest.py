@@ -37,10 +37,11 @@ def custom_state(spec, *, mode="full", to_move=Player.A, flags=None, declined=No
     """
     from dover_engine.state import FlagLoc, GameState, Piece
 
-    pieces = {
-        pid: Piece(id=pid, type=ptype, owner=owner, square=sq)
-        for pid, ptype, owner, sq in spec
-    }
+    pieces = {}
+    for entry in spec:
+        pid, ptype, owner, sq = entry[:4]
+        carrying = entry[4] if len(entry) > 4 else frozenset()
+        pieces[pid] = Piece(id=pid, type=ptype, owner=owner, square=sq, carrying=carrying)
     if flags is None:
         flags = (
             {p: FlagLoc(square=BASE[p]) for p in Player} if mode == "full" else {}
