@@ -28,12 +28,34 @@ Passive hazards (mine / mine-layer adjacency kills) and the Flying Boat's harbou
   the flag lifecycle, and all win/draw conditions. 320+ tests including the
   exhaustive matrix cross-check and seeded random self-play with invariant
   checks. Rulings and deviations: [docs/IMPLEMENTATION_NOTES.md](docs/IMPLEMENTATION_NOTES.md).
+- **`packages/server`** — FastAPI + WebSocket server: in-memory rooms,
+  per-player redaction (enemy types hidden until legitimately learned),
+  setup flow with server-generated random arrangements, reconnect takeover.
+- **`packages/client`** — Vite + React client: join screen, fleet arrangement
+  (shuffle / click-to-swap), fog-of-war board with legal-move highlights,
+  the simultaneous Attack!/No Attack! declaration dialog, standing attacks
+  and declines, flag display, combat log, casualty lists. Short game is the
+  default mode.
 
-Run the tests:
+## Playing
 
 ```bash
-python3 -m venv .venv && ./.venv/bin/pip install -e packages/engine pytest && ./.venv/bin/pytest packages/engine
+python3 -m venv .venv && ./.venv/bin/pip install -e packages/engine -e packages/server && (cd packages/client && npm install)
 ```
+
+Then in two terminals:
+
+```bash
+./.venv/bin/uvicorn dover_server.app:app --port 8000 --app-dir packages/server/src
+```
+
+```bash
+cd packages/client && npm run dev -- --host
+```
+
+Open http://localhost:5173 on two devices (or two tabs), pick the same room
+name and opposite sides. Run the tests with `./.venv/bin/pytest packages`
+(add `pytest` and `httpx` to the venv for the server suite).
 
 ## Planned architecture
 

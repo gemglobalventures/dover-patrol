@@ -99,10 +99,10 @@ def test_bad_setup_is_rejected():
             assert err["reason"]
 
 
-def test_side_already_taken():
+def test_reconnect_takes_over_the_seat():
     with TestClient(app) as client:
         with client.websocket_connect("/ws/dup/a?mode=full") as ws1:
             drain_until(ws1, "joined")
             with client.websocket_connect("/ws/dup/a") as ws2:
-                err = drain_until(ws2, "error")
-                assert "taken" in err["reason"].lower()
+                joined = drain_until(ws2, "joined")
+                assert joined["player"] == "a"

@@ -51,10 +51,14 @@ async def game_socket(ws: WebSocket, room_id: str, side: str, mode: str = "captu
         return
     player = Player(side)
     room = rooms.setdefault(room_id, Room(room_id=room_id, mode=mode))
-    if room.sockets[player] is not None:
-        await ws.send_json({"type": "error", "reason": f"side {side!r} is already taken"})
-        await ws.close()
-        return
+    old = room.sockets[player]
+    if old is not None:
+        # Take over the seat: a refresh or reconnect replaces the stale socket.
+        room.sockets[player] = None
+        try:
+            await old.close()
+        except Exception:
+            pass
 
     room.sockets[player] = ws
     await ws.send_json(
@@ -75,11 +79,12 @@ async def game_socket(ws: WebSocket, room_id: str, side: str, mode: str = "captu
             data = await ws.receive_json()
             await _handle_message(room, player, ws, data)
     except WebSocketDisconnect:
-        room.sockets[player] = None
-        try:
-            await _room_status(room)
-        except Exception:
-            pass
+        if room.sockets[player] is ws:  # a takeover may already own the seat
+            room.sockets[player] = None
+            try:
+                await _room_status(room)
+            except Exception:
+                pass
 
 
 async def _handle_message(room: Room, player: Player, ws: WebSocket, data: dict) -> None:
