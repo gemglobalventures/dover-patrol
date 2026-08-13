@@ -28,6 +28,34 @@ def make_placements(mode: str, player: Player) -> list[tuple[PieceType, tuple]]:
     return list(zip(roster_list(roster), side_squares(player, back_rows)))
 
 
+def custom_state(spec, *, mode="full", to_move=Player.A, flags=None, declined=None,
+                 transfer_window=None):
+    """Build a GameState directly from (pid, type, owner, square) tuples.
+
+    Bypasses setup validation so tests can stage precise mid-game positions.
+    In full mode flags default to sitting on their owners' bases.
+    """
+    from dover_engine.state import FlagLoc, GameState, Piece
+
+    pieces = {
+        pid: Piece(id=pid, type=ptype, owner=owner, square=sq)
+        for pid, ptype, owner, sq in spec
+    }
+    if flags is None:
+        flags = (
+            {p: FlagLoc(square=BASE[p]) for p in Player} if mode == "full" else {}
+        )
+    return GameState(
+        mode=mode,
+        pieces=pieces,
+        flags=flags,
+        to_move=to_move,
+        declined=declined or frozenset(),
+        knowledge={Player.A: {}, Player.B: {}},
+        transfer_window=transfer_window or frozenset(),
+    )
+
+
 @pytest.fixture
 def full_game():
     return new_game(
