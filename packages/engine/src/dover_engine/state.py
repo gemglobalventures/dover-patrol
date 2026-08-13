@@ -118,6 +118,11 @@ def _validate_placements(mode: str, player: Player, placements) -> None:
         raise SetupError(f"{player}: back rows must be completely filled")
 
 
+def validate_placements(mode: str, player: Player, placements) -> None:
+    """Public setup validation for a single player's placement list."""
+    _validate_placements(mode, player, placements)
+
+
 def new_game(mode, placements_a, placements_b, first_to_move) -> GameState:
     if mode not in ("full", "capture_base"):
         raise SetupError(f"unknown mode {mode!r}")

@@ -1,0 +1,16 @@
+[project]
+name = "dover-server"
+version = "0.1.0"
+description = "Dover Patrol game server — rooms, redaction, WebSocket protocol"
+requires-python = ">=3.12"
+dependencies = ["fastapi", "uvicorn[standard]", "dover-engine"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

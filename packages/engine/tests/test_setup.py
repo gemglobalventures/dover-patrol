@@ -97,3 +97,12 @@ def test_short_game_zone_is_three_rows():
             bad,
             first_to_move=Player.A,
         )
+
+
+def test_public_validate_placements():
+    from dover_engine.state import validate_placements
+
+    good = make_placements("full", Player.A)
+    validate_placements("full", Player.A, good)  # should not raise
+    with pytest.raises(SetupError):
+        validate_placements("full", Player.A, good[:-1])
