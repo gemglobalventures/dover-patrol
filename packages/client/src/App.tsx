@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Board, HighlightKind } from "./Board";
 import { Battle, useGame } from "./useGame";
 import type { ActionMsg, PieceView, PlacementMsg, Side, Square } from "./types";
-import { PIECE_NAMES, PIECE_SHORT } from "./types";
+import { PIECE_INFO, PIECE_NAMES, PIECE_SHORT, UNKNOWN_INFO } from "./types";
 
 export default function App() {
   const [joined, setJoined] = useState<{
@@ -112,6 +112,7 @@ function Game({
 }) {
   const game = useGame(room, side, mode, ai, recall);
   const [selected, setSelected] = useState<string | null>(null);
+  const [inspect, setInspect] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);
 
   const state = game.state;
@@ -155,11 +156,13 @@ function Game({
   }
 
   function clickCell(col: number, row: number) {
-    if (!state || !myTurn || dialog) return;
+    if (!state || dialog) return;
     const key = `${col},${row}`;
     const clicked = live.find(
       (p) => p.square?.[0] === col && p.square?.[1] === row
     );
+    setInspect(clicked ? clicked.id : null);
+    if (!myTurn) return;
 
     if (selectedPiece && highlights.has(key) && highlights.get(key) !== "selected") {
       const kind = highlights.get(key)!;
@@ -244,6 +247,12 @@ function Game({
           </button>
         )}
         {game.error && <div className="error">{game.error}</div>}
+        {(() => {
+          const p = inspect ? pieces.find((x) => x.id === inspect) : null;
+          return p && p.square ? (
+            <PieceCard type={p.type} owner={p.owner} carrying={p.carrying} />
+          ) : null;
+        })()}
         <Casualties sunk={sunk} you={state.you} />
         <div className="log">
           {game.log.slice().reverse().map((line, i) => (
@@ -369,6 +378,34 @@ function BattleOverlay({
 
 function label(type: string | null | undefined): string {
   return type ? PIECE_NAMES[type] : "Unknown ship";
+}
+
+function PieceCard({
+  type,
+  owner,
+  carrying = [],
+}: {
+  type: string | null;
+  owner: Side;
+  carrying?: Side[];
+}) {
+  return (
+    <div className="piece-card">
+      <div className="piece-card-head">
+        <span className={`chip chip-${owner}`}>
+          {type ? PIECE_SHORT[type] : "?"}
+        </span>
+        <strong>{type ? PIECE_NAMES[type] : "Unknown ship"}</strong>
+      </div>
+      <p>{type ? PIECE_INFO[type] : UNKNOWN_INFO}</p>
+      {carrying.length > 0 && (
+        <p>
+          Carrying the {carrying.map((f) => (f === "a" ? "Blue" : "Red")).join(" and ")}{" "}
+          flag{carrying.length > 1 ? "s" : ""}.
+        </p>
+      )}
+    </div>
+  );
 }
 
 function describeTarget(sq: Square, live: PieceView[]): string {
@@ -537,6 +574,7 @@ function SetupScreen({
           </p>
         )}
         {game.error && <div className="error">{game.error}</div>}
+        {selectedType && <PieceCard type={selectedType} owner={side} />}
         <div className="you">
           Opponent {game.setupDone[side === "a" ? "b" : "a"] ? "is ready" : "still arranging"}.
         </div>

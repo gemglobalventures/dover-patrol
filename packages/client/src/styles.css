@@ -393,3 +393,24 @@ button.ghost {
   font-size: 1.05em;
   color: var(--gold);
 }
+
+.piece-card {
+  margin: 0.7em 0;
+  padding: 0.7em 0.9em;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--gold);
+  border-radius: 6px;
+  background: rgba(36, 80, 111, 0.45);
+  font-size: 0.9em;
+  line-height: 1.45;
+}
+.piece-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  margin-bottom: 0.3em;
+}
+.piece-card p {
+  margin: 0.35em 0 0;
+  opacity: 0.92;
+}

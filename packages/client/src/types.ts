@@ -141,3 +141,39 @@ function sq(v: unknown): string {
   const [c, r] = v as Square;
   return `${"abcdefgh"[c]}${r + 1}`;
 }
+
+export const PIECE_INFO: Record<string, string> = {
+  flagship:
+    "Value 10, the most powerful ship afloat: sinks any lower-valued ship it attacks or that attacks it. Only another Flagship (mutual destruction), a Submarine or a Mine can send it down.",
+  vice_flagship:
+    "Value 9. Sinks everything below it; lost only to the Flagship, an equal, a Submarine or a Mine.",
+  battle_squadron:
+    "Value 8. A heavy unit — beaten only by values 9 and 10, Submarines and Mines.",
+  battleship:
+    "Value 7. Sinks value 6 and below; beaten by 8 and above, Submarines and Mines.",
+  battle_cruiser:
+    "Value 6. Sinks value 5 and below; beaten by 7 and above, Submarines and Mines.",
+  light_cruiser:
+    "Value 5. Sinks value 4 and below; beaten by 6 and above, Submarines and Mines.",
+  destroyer:
+    "Value 4 — the workhorse. The only ship that can sink a Mine Layer, and one of the two that can bring down the Flying Boat. Sinks value 3 and below; beaten by 5 and above, Submarines and Mines.",
+  auxiliary_cruiser:
+    "Value 3. Sinks value 2 and below; beaten by 4 and above, Submarines and Mines.",
+  motor_torpedo_boat:
+    "Value 2, but deadly out of proportion: it sinks Submarines and brings down the Flying Boat. Sinks the Patrol Vessel; beaten by value 3 and above, and by Mines.",
+  patrol_vessel:
+    "Value 1, the humblest ship — it sinks nothing but the enemy's Patrol Vessel (mutually). Useful for scouting attacks that force the enemy to show a piece.",
+  mine_layer:
+    "No value; may move but never attack. Any enemy ship that comes alongside is blown up — except Mine Sweepers, Submarines, Flying Boats, Destroyers and other Mine Layers. Only a Destroyer can sink it.",
+  mine_sweeper:
+    "No value. The only piece that can destroy a Mine — and the only one that can recover a Flag lost to one. Against anything else its attacks achieve nothing (or sink it: every numbered ship beats it). Keep it guarded.",
+  submarine:
+    "No value, but sinks every numbered ship — except the Motor Torpedo Boat (2), which sinks it. No effect against Mine Layers, Flying Boats or other Submarines; blown up by Mines. Worth far more than its blank face suggests.",
+  flying_boat:
+    "The scout. Attacking with it (or being attacked) reveals the enemy piece and nothing sinks — except against Motor Torpedo Boats (2) and Destroyers (4), which bring it down. The only piece that may cross the Harbour Wall (the crossing must be declared) and it may hop two squares over a Mine, as in draughts.",
+  mine:
+    "Never moves — ever. Any enemy ship that moves alongside is blown up, except Mine Sweepers, Mine Layers and Flying Boats. Only a Mine Sweeper can destroy it. A Flag lost to a Mine can be recovered only by a Mine Sweeper.",
+};
+
+export const UNKNOWN_INFO =
+  "An enemy ship of unknown class. Its identity is shown only when combat touches it — or you can probe it with a cheap attack and pay the price of the reveal.";
