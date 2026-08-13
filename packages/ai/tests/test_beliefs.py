@@ -107,3 +107,19 @@ def test_determinize_builds_consistent_full_info_state():
         sample.pieces[pid].square == state.pieces[pid].square
         for pid in state.pieces
     )
+
+
+def test_mines_favour_the_back_rows():
+    """The depth prior must point at the owner's baseline: B's back row is
+    row 11, so sampled mines should land there more often than on row 9."""
+    spec = short_enemy_fleet()
+    state = mk_state(spec)
+    rng = random.Random(5)
+    row_hits = Counter()
+    for _ in range(400):
+        assignment = sample_assignment(state, A, moved_ids=set(), rng=rng,
+                                       knowledge={})
+        for pid, t in assignment.items():
+            if t is T.MINE:
+                row_hits[state.pieces[pid].square[1]] += 1
+    assert row_hits[11] > row_hits[9]

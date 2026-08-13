@@ -280,3 +280,116 @@ button.ghost {
   z-index: 10;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
 }
+
+.tray {
+  margin-top: 0.8em;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35em;
+}
+.tray-chip {
+  font-family: "Gill Sans", "Trebuchet MS", sans-serif;
+  font-size: 0.8em;
+  font-weight: bold;
+  padding: 0.3em 0.5em;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  margin: 0;
+  cursor: pointer;
+}
+.tray-chip.chip-a {
+  background: var(--blue-deep);
+  color: #eaf4fc;
+}
+.tray-chip.chip-b {
+  background: var(--red-deep);
+  color: #fdecec;
+}
+.tray-chip.tray-selected {
+  outline: 3px solid var(--gold);
+  outline-offset: -1px;
+}
+
+.battle-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 22, 34, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  cursor: pointer;
+}
+.battle-card {
+  background: var(--sea);
+  border: 3px solid var(--gold);
+  border-radius: 10px;
+  padding: 2em 3em;
+  text-align: center;
+  min-width: 340px;
+  box-shadow: 0 12px 60px rgba(0, 0, 0, 0.7);
+  animation: battle-in 0.35s ease-out;
+}
+@keyframes battle-in {
+  from {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.battle-title {
+  font-family: "Gill Sans", "Trebuchet MS", sans-serif;
+  font-weight: bold;
+  letter-spacing: 0.25em;
+  color: var(--gold);
+  margin-bottom: 0.8em;
+}
+.battle-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1em;
+}
+.battle-chip {
+  font-size: 1.6em;
+  padding: 0.4em 0.6em;
+  transition: opacity 0.4s, transform 0.4s;
+}
+.battle-card.stage-0 .battle-chip {
+  animation: clash 0.5s ease-in-out;
+}
+@keyframes clash {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  30% {
+    transform: translateX(6px) rotate(2deg);
+  }
+  60% {
+    transform: translateX(-5px) rotate(-2deg);
+  }
+}
+.battle-sunk {
+  opacity: 0.25;
+  transform: rotate(12deg) translateY(8px);
+}
+.battle-vs {
+  font-size: 1.8em;
+  color: var(--gold);
+}
+.battle-names {
+  margin-top: 0.9em;
+  min-height: 1.3em;
+  font-style: italic;
+  opacity: 0.9;
+}
+.battle-outcome {
+  margin-top: 0.4em;
+  min-height: 1.4em;
+  font-weight: bold;
+  font-size: 1.05em;
+  color: var(--gold);
+}

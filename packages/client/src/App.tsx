@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Board, HighlightKind } from "./Board";
-import { useGame } from "./useGame";
-import type { ActionMsg, PieceView, Side, Square } from "./types";
+import { Battle, useGame } from "./useGame";
+import type { ActionMsg, PieceView, PlacementMsg, Side, Square } from "./types";
 import { PIECE_NAMES, PIECE_SHORT } from "./types";
 
 export default function App() {
@@ -112,7 +112,6 @@ function Game({
 }) {
   const game = useGame(room, side, mode, ai, recall);
   const [selected, setSelected] = useState<string | null>(null);
-  const [swapFrom, setSwapFrom] = useState<number | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);
 
   const state = game.state;
@@ -129,14 +128,7 @@ function Game({
   }, [state]);
 
   if (game.phase === "setup") {
-    return (
-      <SetupScreen
-        side={side}
-        game={game}
-        swapFrom={swapFrom}
-        setSwapFrom={setSwapFrom}
-      />
-    );
+    return <SetupScreen side={side} mode={mode} game={game} />;
   }
   if (!state) return <div className="join"><h1>Connecting…</h1></div>;
 
@@ -286,9 +278,97 @@ function Game({
             </button>
           </div>
         )}
+        {game.battles.length > 0 && (
+          <BattleOverlay
+            battle={game.battles[0]}
+            pieces={pieces}
+            onDone={game.dismissBattle}
+          />
+        )}
       </div>
     </div>
   );
+}
+
+function BattleOverlay({
+  battle,
+  pieces,
+  onDone,
+}: {
+  battle: Battle;
+  pieces: PieceView[];
+  onDone: () => void;
+}) {
+  const [stage, setStage] = useState(0); // 0 clash, 1 reveal, 2 outcome
+
+  useEffect(() => {
+    setStage(0);
+    const timers = [
+      setTimeout(() => setStage(1), 800),
+      setTimeout(() => setStage(2), 1800),
+      setTimeout(onDone, 6000),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, [battle, onDone]);
+
+  const find = (id: string) => pieces.find((p) => p.id === id);
+  const attacker = find(battle.attackerId);
+  const defender = find(battle.defenderId);
+  const aType = battle.attackerType ?? attacker?.type ?? null;
+  const dType = battle.defenderType ?? defender?.type ?? null;
+  const hazard = battle.kind === "hazard";
+  const aFate = hazard ? "sunk" : battle.attackerFate;
+  const dFate = hazard ? "holds" : battle.defenderFate;
+
+  const outcome = hazard
+    ? `${label(aType)} strikes a mine and is blown up!`
+    : aFate === "sunk" && dFate === "sunk"
+      ? "Both ships are sunk!"
+      : dFate === "sunk"
+        ? `${label(dType)} is sunk!`
+        : aFate === "sunk"
+          ? `${label(aType)} is sunk!`
+          : "No effect — both remain on station.";
+
+  function chip(piece: PieceView | undefined, type: string | null, fate: string | undefined) {
+    const revealed = stage >= 1;
+    const sunk = stage >= 2 && fate === "sunk";
+    return (
+      <span
+        className={`chip chip-${piece?.owner ?? "a"} battle-chip${
+          sunk ? " battle-sunk" : ""
+        }`}
+      >
+        {revealed && type ? PIECE_SHORT[type] : "?"}
+      </span>
+    );
+  }
+
+  return (
+    <div
+      className="battle-backdrop"
+      onClick={() => (stage < 2 ? setStage(2) : onDone())}
+    >
+      <div className={`battle-card stage-${stage}`}>
+        <div className="battle-title">
+          {hazard ? "MINED!" : "ATTACK!"}
+        </div>
+        <div className="battle-row">
+          {chip(attacker, aType, aFate)}
+          <span className="battle-vs">{hazard ? "✸" : "⚔"}</span>
+          {chip(defender, dType, dFate)}
+        </div>
+        <div className="battle-names">
+          {stage >= 1 ? `${label(aType)} — ${label(dType)}` : " "}
+        </div>
+        <div className="battle-outcome">{stage >= 2 ? outcome : " "}</div>
+      </div>
+    </div>
+  );
+}
+
+function label(type: string | null | undefined): string {
+  return type ? PIECE_NAMES[type] : "Unknown ship";
 }
 
 function describeTarget(sq: Square, live: PieceView[]): string {
@@ -313,45 +393,90 @@ function Casualties({ sunk, you }: { sunk: PieceView[]; you: Side }) {
 
 function SetupScreen({
   side,
+  mode,
   game,
-  swapFrom,
-  setSwapFrom,
 }: {
   side: Side;
+  mode: string;
   game: ReturnType<typeof useGame>;
-  swapFrom: number | null;
-  setSwapFrom: (i: number | null) => void;
 }) {
-  const proposal = game.proposal;
-  const pieces: PieceView[] = (proposal ?? []).map((p, i) => ({
+  const [placed, setPlaced] = useState<PlacementMsg[]>([]);
+  const [selectedType, setSelectedType] = useState<string | null>(null);
+  const autoFill = useRef(false);
+  const waiting = game.setupDone[side];
+
+  // The first server proposal only tells us the roster (tray contents);
+  // after an explicit Auto-arrange click it fills the board instead.
+  useEffect(() => {
+    if (game.proposal && autoFill.current) {
+      setPlaced(game.proposal);
+      setSelectedType(null);
+      autoFill.current = false;
+    }
+  }, [game.proposal]);
+
+  const roster = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of game.proposal ?? []) {
+      counts.set(p.type, (counts.get(p.type) ?? 0) + 1);
+    }
+    return counts;
+  }, [game.proposal]);
+
+  const trayCounts = useMemo(() => {
+    const counts = new Map(roster);
+    for (const p of placed) {
+      counts.set(p.type, (counts.get(p.type) ?? 0) - 1);
+    }
+    return counts;
+  }, [roster, placed]);
+
+  const trayTotal = [...trayCounts.values()].reduce((a, b) => a + b, 0);
+
+  const backRows = mode === "full" ? 5 : 3;
+  const zoneRows = side === "a"
+    ? Array.from({ length: backRows }, (_, i) => i)
+    : Array.from({ length: backRows }, (_, i) => 11 - i);
+  const oddRow = side === "a" ? backRows : 11 - backRows;
+  const base: [number, number] = side === "a" ? [0, 0] : [7, 11];
+  const oddRowUsed = placed.some((p) => p.row === oddRow);
+
+  function placeable(col: number, row: number): boolean {
+    if (col === base[0] && row === base[1]) return false;
+    if (placed.some((p) => p.col === col && p.row === row)) return false;
+    if (zoneRows.includes(row)) return true;
+    return row === oddRow && !oddRowUsed;
+  }
+
+  const pieces: PieceView[] = placed.map((p, i) => ({
     id: `setup-${i}`,
     owner: side,
     square: [p.col, p.row],
     type: p.type,
     carrying: [],
   }));
+
   const highlights = new Map<string, HighlightKind>();
-  if (swapFrom !== null && proposal) {
-    const p = proposal[swapFrom];
-    highlights.set(`${p.col},${p.row}`, "selected");
+  if (selectedType && !waiting) {
+    for (const row of [...zoneRows, oddRow]) {
+      for (let col = 0; col < 8; col++) {
+        if (placeable(col, row)) highlights.set(`${col},${row}`, "move");
+      }
+    }
   }
-  const waiting = game.setupDone[side];
 
   function clickCell(col: number, row: number) {
-    if (!proposal || waiting) return;
-    const idx = proposal.findIndex((p) => p.col === col && p.row === row);
-    if (swapFrom === null) {
-      if (idx >= 0) setSwapFrom(idx);
-    } else {
-      if (idx >= 0 && idx !== swapFrom) {
-        const next = proposal.map((p, i) => {
-          if (i === swapFrom) return { ...p, col: proposal[idx].col, row: proposal[idx].row };
-          if (i === idx) return { ...p, col: proposal[swapFrom].col, row: proposal[swapFrom].row };
-          return p;
-        });
-        game.setProposal(next);
-      }
-      setSwapFrom(null);
+    if (waiting) return;
+    const idx = placed.findIndex((p) => p.col === col && p.row === row);
+    if (idx >= 0) {
+      // Pick a placed ship back up into the tray.
+      setPlaced(placed.filter((_, i) => i !== idx));
+      setSelectedType(placed[idx].type);
+      return;
+    }
+    if (selectedType && (trayCounts.get(selectedType) ?? 0) > 0 && placeable(col, row)) {
+      setPlaced([...placed, { type: selectedType, col, row }]);
+      if ((trayCounts.get(selectedType) ?? 0) <= 1) setSelectedType(null);
     }
   }
 
@@ -361,15 +486,50 @@ function SetupScreen({
         <h1>Dover Patrol</h1>
         <h2>Arrange your fleet</h2>
         <p>
-          Click two of your ships to swap them, or shuffle for a fresh
-          arrangement. Your opponent cannot see your placement.
+          Pick a ship from the tray, then click a square on your side —
+          one piece may stand on the row beyond your back rows. Clicking a
+          placed ship returns it to the tray. Your opponent cannot see your
+          placement.
         </p>
         {!waiting ? (
           <>
-            <button onClick={game.requestShuffle}>Shuffle</button>
-            <button className="primary" disabled={!proposal} onClick={game.submitSetup}>
-              Ready
+            <button
+              onClick={() => {
+                autoFill.current = true;
+                game.requestShuffle();
+              }}
+            >
+              Auto-arrange
             </button>
+            <button onClick={() => setPlaced([])} disabled={placed.length === 0}>
+              Clear
+            </button>
+            <button
+              className="primary"
+              disabled={trayTotal !== 0}
+              onClick={() => game.submitSetup(placed)}
+            >
+              Ready{trayTotal > 0 ? ` (${trayTotal} to place)` : ""}
+            </button>
+            <div className="tray">
+              {[...trayCounts.entries()]
+                .filter(([, n]) => n > 0)
+                .map(([type, n]) => (
+                  <button
+                    key={type}
+                    className={`tray-chip chip-${side}${
+                      selectedType === type ? " tray-selected" : ""
+                    }`}
+                    title={PIECE_NAMES[type]}
+                    onClick={() =>
+                      setSelectedType(selectedType === type ? null : type)
+                    }
+                  >
+                    {PIECE_SHORT[type]}
+                    {n > 1 ? ` ×${n}` : ""}
+                  </button>
+                ))}
+            </div>
           </>
         ) : (
           <p>

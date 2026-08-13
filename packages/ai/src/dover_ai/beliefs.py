@@ -67,7 +67,7 @@ def sample_assignment(state: GameState, ai: Player, *, moved_ids: set[str],
     others = [t for t in draw if t is not T.MINE]
     for _ in range(draw.count(T.MINE)):
         weights = [
-            1 + (11 - p.square[1] if enemy is Player.B else p.square[1])
+            1 + (p.square[1] if enemy is Player.B else 11 - p.square[1])
             for p in eligible
         ]
         pick = rng.choices(range(len(eligible)), weights=weights)[0]
