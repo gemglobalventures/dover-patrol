@@ -9,6 +9,8 @@ export default function App() {
     room: string;
     side: Side;
     mode: string;
+    ai: boolean;
+    recall: number;
   } | null>(null);
 
   if (!joined) return <JoinScreen onJoin={setJoined} />;
@@ -18,11 +20,20 @@ export default function App() {
 function JoinScreen({
   onJoin,
 }: {
-  onJoin: (j: { room: string; side: Side; mode: string }) => void;
+  onJoin: (j: {
+    room: string;
+    side: Side;
+    mode: string;
+    ai: boolean;
+    recall: number;
+  }) => void;
 }) {
   const [room, setRoom] = useState("harbour");
   const [side, setSide] = useState<Side>("a");
   const [mode, setMode] = useState("capture_base");
+  const [opponent, setOpponent] = useState("human");
+  const [recall, setRecall] = useState("0.8");
+  const ai = opponent === "computer";
   return (
     <div className="join">
       <h1>Dover Patrol</h1>
@@ -32,12 +43,30 @@ function JoinScreen({
         <input value={room} onChange={(e) => setRoom(e.target.value)} />
       </label>
       <label>
-        Side
-        <select value={side} onChange={(e) => setSide(e.target.value as Side)}>
-          <option value="a">Blue (south)</option>
-          <option value="b">Red (north)</option>
+        Opponent
+        <select value={opponent} onChange={(e) => setOpponent(e.target.value)}>
+          <option value="human">Human (two players)</option>
+          <option value="computer">Computer</option>
         </select>
       </label>
+      {ai ? (
+        <label>
+          Difficulty
+          <select value={recall} onChange={(e) => setRecall(e.target.value)}>
+            <option value="0.5">Easy (forgetful admiral)</option>
+            <option value="0.8">Normal</option>
+            <option value="1.0">Hard (perfect memory)</option>
+          </select>
+        </label>
+      ) : (
+        <label>
+          Side
+          <select value={side} onChange={(e) => setSide(e.target.value as Side)}>
+            <option value="a">Blue (south)</option>
+            <option value="b">Red (north)</option>
+          </select>
+        </label>
+      )}
       <label>
         Game
         <select value={mode} onChange={(e) => setMode(e.target.value)}>
@@ -45,7 +74,18 @@ function JoinScreen({
           <option value="full">Full game (40 pieces + flag)</option>
         </select>
       </label>
-      <button disabled={!room.trim()} onClick={() => onJoin({ room: room.trim(), side, mode })}>
+      <button
+        disabled={!room.trim()}
+        onClick={() =>
+          onJoin({
+            room: room.trim(),
+            side: ai ? "a" : side,
+            mode,
+            ai,
+            recall: parseFloat(recall),
+          })
+        }
+      >
         Join
       </button>
     </div>
@@ -57,8 +97,20 @@ interface Dialog {
   options: { label: string; action: ActionMsg }[];
 }
 
-function Game({ room, side, mode }: { room: string; side: Side; mode: string }) {
-  const game = useGame(room, side, mode);
+function Game({
+  room,
+  side,
+  mode,
+  ai,
+  recall,
+}: {
+  room: string;
+  side: Side;
+  mode: string;
+  ai: boolean;
+  recall: number;
+}) {
+  const game = useGame(room, side, mode, ai, recall);
   const [selected, setSelected] = useState<string | null>(null);
   const [swapFrom, setSwapFrom] = useState<number | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);

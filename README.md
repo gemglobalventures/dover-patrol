@@ -36,6 +36,17 @@ Passive hazards (mine / mine-layer adjacency kills) and the Flying Boat's harbou
   the simultaneous Attack!/No Attack! declaration dialog, standing attacks
   and declines, flag display, combat log, casualty lists. Short game is the
   default mode.
+- **`packages/ai`** — the computer opponent (DESIGN.md §9): a belief model
+  over unknown enemy pieces constrained by the roster, public casualties and
+  the moved-pieces-can't-be-mines rule (with mines biased toward unmoved
+  back-row pieces); determinized alpha-beta search over sampled fleets with
+  root-move voting. Difficulty degrades **memory, not search**: the `recall`
+  parameter is the probability the bot remembers each piece it has been
+  shown, with the forgetting stable per piece across turns. Choose
+  "Computer" on the join screen (the bot sails Red); Easy/Normal/Hard map to
+  recall 0.5/0.8/1.0. Since combat always reveals both pieces, the design
+  doc's soft-evidence updates reduce mostly to hard constraints — noted
+  divergence from §9.
 
 ## Playing
 

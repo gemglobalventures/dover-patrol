@@ -23,7 +23,13 @@ export interface GameConnection {
   sendAction: (a: ActionMsg) => void;
 }
 
-export function useGame(room: string, side: Side, mode: string): GameConnection {
+export function useGame(
+  room: string,
+  side: Side,
+  mode: string,
+  ai = false,
+  recall = 1.0
+): GameConnection {
   const wsRef = useRef<WebSocket | null>(null);
   const [phase, setPhase] = useState("setup");
   const [state, setState] = useState<ClientState | null>(null);
@@ -39,8 +45,13 @@ export function useGame(room: string, side: Side, mode: string): GameConnection 
 
   useEffect(() => {
     const proto = location.protocol === "https:" ? "wss" : "ws";
+    const params = new URLSearchParams({ mode });
+    if (ai) {
+      params.set("ai", "1");
+      params.set("recall", String(recall));
+    }
     const ws = new WebSocket(
-      `${proto}://${location.host}/ws/${encodeURIComponent(room)}/${side}?mode=${mode}`
+      `${proto}://${location.host}/ws/${encodeURIComponent(room)}/${side}?${params}`
     );
     wsRef.current = ws;
     ws.onopen = () => setConnected(true);
@@ -79,7 +90,7 @@ export function useGame(room: string, side: Side, mode: string): GameConnection 
       }
     };
     return () => ws.close();
-  }, [room, side, mode]);
+  }, [room, side, mode, ai, recall]);
 
   const send = useCallback((data: object) => {
     wsRef.current?.send(JSON.stringify(data));

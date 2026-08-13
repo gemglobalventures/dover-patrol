@@ -57,6 +57,23 @@ class Room:
     placements: dict = field(default_factory=lambda: {Player.A: None, Player.B: None})
     state: GameState | None = None
     rng: random.Random = field(default_factory=random.Random)
+    ai: bool = False  # the computer always sails as Player B
+    ai_params: dict = field(default_factory=dict)
+    agent: object | None = None
+    moved_ids: set = field(default_factory=set)
+
+    def get_agent(self):
+        if self.agent is None:
+            from dover_ai.agent import Agent
+
+            self.agent = Agent(
+                Player.B,
+                samples=int(self.ai_params.get("samples", 12)),
+                depth=int(self.ai_params.get("depth", 2)),
+                recall=float(self.ai_params.get("recall", 1.0)),
+                seed=self.rng.randrange(2**31),
+            )
+        return self.agent
 
     @property
     def phase(self) -> str:

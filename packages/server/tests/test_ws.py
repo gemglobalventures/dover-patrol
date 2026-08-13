@@ -106,3 +106,37 @@ def test_reconnect_takes_over_the_seat():
             with client.websocket_connect("/ws/dup/a") as ws2:
                 joined = drain_until(ws2, "joined")
                 assert joined["player"] == "a"
+
+
+def test_ai_room_plays_back():
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            "/ws/bot/a?mode=capture_base&ai=1&ai_samples=2&ai_depth=1"
+        ) as ws_a:
+            drain_until(ws_a, "joined")
+            do_setup(ws_a)
+            state = drain_until(ws_a, "state")["state"]
+            # If the bot won the lot it may already have moved; get to our turn.
+            for _ in range(5):
+                if state["to_move"] == "a":
+                    break
+                state = drain_until(ws_a, "state")["state"]
+            assert state["to_move"] == "a"
+            move = next(x for x in state["legal_actions"] if x["type"] == "move")
+            ws_a.send_json(move)
+            # Our move is applied, then the bot answers: drain states until
+            # the turn comes back to us with the bot having acted.
+            for _ in range(5):
+                state = drain_until(ws_a, "state")["state"]
+                if state["to_move"] == "a":
+                    break
+            assert state["to_move"] == "a"
+
+
+def test_ai_room_rejects_second_human():
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws/bots/a?mode=capture_base&ai=1") as ws_a:
+            drain_until(ws_a, "joined")
+            with client.websocket_connect("/ws/bots/b") as ws_b:
+                err = drain_until(ws_b, "error")
+                assert "computer" in err["reason"].lower()

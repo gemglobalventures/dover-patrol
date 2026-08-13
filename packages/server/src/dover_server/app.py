@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from dover_engine.engine import IllegalAction, apply_action
@@ -30,6 +32,32 @@ async def _broadcast(room: Room, message: dict) -> None:
             await ws.send_json(message)
 
 
+def _track_moves(room: Room, events) -> None:
+    for event in events:
+        if type(event).__name__ == "Moved":
+            room.moved_ids.add(event.piece_id)
+
+
+async def _bot_turn(room: Room) -> None:
+    """Let the computer play while it is Red's move."""
+    if not room.ai:
+        return
+    while (
+        room.state is not None
+        and room.state.winner is None
+        and room.state.to_move is Player.B
+    ):
+        agent = room.get_agent()
+        action = await asyncio.to_thread(agent.choose, room.state, room.moved_ids)
+        room.state, events = apply_action(room.state, action)
+        _track_moves(room, events)
+        await _broadcast(
+            room,
+            {"type": "events", "events": [serialize_event(e) for e in events]},
+        )
+        await _send_states(room)
+
+
 async def _room_status(room: Room) -> None:
     await _broadcast(
         room,
@@ -43,14 +71,37 @@ async def _room_status(room: Room) -> None:
 
 
 @app.websocket("/ws/{room_id}/{side}")
-async def game_socket(ws: WebSocket, room_id: str, side: str, mode: str = "capture_base"):
+async def game_socket(
+    ws: WebSocket,
+    room_id: str,
+    side: str,
+    mode: str = "capture_base",
+    ai: int = 0,
+    recall: float = 1.0,
+    ai_samples: int = 12,
+    ai_depth: int = 2,
+):
     await ws.accept()
     if side not in ("a", "b"):
         await ws.send_json({"type": "error", "reason": "side must be 'a' or 'b'"})
         await ws.close()
         return
     player = Player(side)
-    room = rooms.setdefault(room_id, Room(room_id=room_id, mode=mode))
+    room = rooms.setdefault(
+        room_id,
+        Room(
+            room_id=room_id,
+            mode=mode,
+            ai=bool(ai),
+            ai_params={"samples": ai_samples, "depth": ai_depth, "recall": recall},
+        ),
+    )
+    if room.ai and player is Player.B:
+        await ws.send_json(
+            {"type": "error", "reason": "this room's Red side is the computer"}
+        )
+        await ws.close()
+        return
     old = room.sockets[player]
     if old is not None:
         # Take over the seat: a refresh or reconnect replaces the stale socket.
@@ -97,9 +148,14 @@ async def _handle_message(room: Room, player: Player, ws: WebSocket, data: dict)
             )
         elif kind == "setup":
             room.submit_setup(player, placements_from_json(data["placements"]))
+            if room.ai and room.placements[Player.B] is None:
+                room.submit_setup(
+                    Player.B, random_placements(room.mode, Player.B, room.rng)
+                )
             await _room_status(room)
             if room.state is not None:
                 await _send_states(room)
+                await _bot_turn(room)
         elif kind in ("move", "attack", "decline", "transfer_flag", "run_aground"):
             if room.state is None:
                 raise IllegalAction("the game has not started")
@@ -107,11 +163,13 @@ async def _handle_message(room: Room, player: Player, ws: WebSocket, data: dict)
                 raise IllegalAction("it is not your turn")
             new_state, events = apply_action(room.state, parse_action(data))
             room.state = new_state
+            _track_moves(room, events)
             await _broadcast(
                 room,
                 {"type": "events", "events": [serialize_event(e) for e in events]},
             )
             await _send_states(room)
+            await _bot_turn(room)
         else:
             await ws.send_json({"type": "error", "reason": f"unknown message type {kind!r}"})
     except (IllegalAction, SetupError, KeyError, ValueError) as exc:
