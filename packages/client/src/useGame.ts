@@ -6,6 +6,7 @@ import type {
   PlacementMsg,
   ServerMsg,
   Side,
+  Square,
 } from "./types";
 import { describeEvent } from "./types";
 
@@ -19,6 +20,11 @@ export interface Battle {
   defenderFate?: string;
 }
 
+export interface LastAction {
+  from: Square[];
+  to: Square[];
+}
+
 export interface GameConnection {
   phase: string;
   state: ClientState | null;
@@ -29,6 +35,7 @@ export interface GameConnection {
   setupDone: Record<Side, boolean>;
   connected: boolean;
   battles: Battle[];
+  lastAction: LastAction | null;
   dismissBattle: () => void;
   requestShuffle: () => void;
   submitSetup: (placements: PlacementMsg[]) => void;
@@ -50,6 +57,7 @@ export function useGame(
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [battles, setBattles] = useState<Battle[]>([]);
+  const [lastAction, setLastAction] = useState<LastAction | null>(null);
   const [setupDone, setSetupDone] = useState<Record<Side, boolean>>({
     a: false,
     b: false,
@@ -116,6 +124,32 @@ export function useGame(
             }
           }
           if (drama.length) setBattles((old) => [...old, ...drama]);
+
+          // Chess-style last-action highlight: departure and arrival squares
+          // of moves, plus the squares combat and mine strikes touched.
+          const from: Square[] = [];
+          const to: Square[] = [];
+          const movedIds = new Set<string>();
+          const squareOf = (id: unknown): Square | null => {
+            const p = pieces.find((x) => x.id === id);
+            return p?.square ?? null;
+          };
+          for (const e of msg.events) {
+            if (e.kind === "Moved") {
+              from.push(e.from_square as Square);
+              to.push(e.to_square as Square);
+              movedIds.add(String(e.piece_id));
+            } else if (e.kind === "Combat") {
+              const atk = squareOf(e.attacker_id);
+              const def = squareOf(e.defender_id);
+              if (atk && !movedIds.has(String(e.attacker_id))) from.push(atk);
+              if (def) to.push(def);
+            } else if (e.kind === "PassiveKill") {
+              const hazard = squareOf(e.hazard_id);
+              if (hazard) to.push(hazard);
+            }
+          }
+          if (from.length || to.length) setLastAction({ from, to });
           break;
         }
         case "error":
@@ -140,6 +174,7 @@ export function useGame(
     setupDone,
     connected,
     battles,
+    lastAction,
     dismissBattle: useCallback(() => setBattles((old) => old.slice(1)), []),
     requestShuffle: useCallback(() => send({ type: "random_setup" }), [send]),
     submitSetup: useCallback(

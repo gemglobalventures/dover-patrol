@@ -180,6 +180,10 @@ function Game({
   );
 
   const highlights = new Map<string, HighlightKind>();
+  if (game.lastAction) {
+    for (const sq of game.lastAction.from) highlights.set(sq.join(","), "last-from");
+    for (const sq of game.lastAction.to) highlights.set(sq.join(","), "last-to");
+  }
   if (selectedPiece?.square) {
     highlights.set(selectedPiece.square.join(","), "selected");
     for (const a of myActions) {

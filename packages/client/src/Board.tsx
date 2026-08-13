@@ -1,7 +1,13 @@
 import type { FlagView, PieceView, Side, Square } from "./types";
 import { PIECE_SHORT } from "./types";
 
-export type HighlightKind = "move" | "attack" | "transfer" | "selected";
+export type HighlightKind =
+  | "move"
+  | "attack"
+  | "transfer"
+  | "selected"
+  | "last-from"
+  | "last-to";
 
 interface BoardProps {
   perspective: Side;
