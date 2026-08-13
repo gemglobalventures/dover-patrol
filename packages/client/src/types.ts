@@ -177,3 +177,39 @@ export const PIECE_INFO: Record<string, string> = {
 
 export const UNKNOWN_INFO =
   "An enemy ship of unknown class. Its identity is shown only when combat touches it — or you can probe it with a cheap attack and pay the price of the reveal.";
+
+export const PIECE_VALUE: Record<string, number | null> = {
+  flagship: 10,
+  vice_flagship: 9,
+  battle_squadron: 8,
+  battleship: 7,
+  battle_cruiser: 6,
+  light_cruiser: 5,
+  destroyer: 4,
+  auxiliary_cruiser: 3,
+  motor_torpedo_boat: 2,
+  patrol_vessel: 1,
+  mine_layer: null,
+  mine_sweeper: null,
+  submarine: null,
+  flying_boat: null,
+  mine: null,
+};
+
+// Individual ship names from the original card pieces.
+export const SHIP_NAMES: Record<string, string[]> = {
+  battleship: ["HMS Surrey", "HMS Lancashire"],
+  battle_cruiser: ["HMS Birmingham", "HMS Manchester", "HMS Glasgow"],
+  light_cruiser: ["HMS Vixen", "HMS Greyhound", "HMS Lion", "HMS Viper"],
+  destroyer: ["HMS Seagull", "HMS Eagle", "HMS Albatross", "HMS Kingfisher"],
+  auxiliary_cruiser: ["HMS Mosquito", "HMS Hornet", "HMS Gnat", "HMS Bee"],
+  submarine: ["Submarine E1", "Submarine E2", "Submarine E3"],
+};
+
+export function shipName(type: string | null, pieceId?: string): string | null {
+  if (!type || !pieceId) return null;
+  const names = SHIP_NAMES[type];
+  if (!names) return null;
+  const n = parseInt(pieceId.replace(/\D/g, ""), 10);
+  return Number.isNaN(n) ? null : names[n % names.length];
+}

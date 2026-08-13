@@ -2,7 +2,44 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Board, HighlightKind } from "./Board";
 import { Battle, useGame } from "./useGame";
 import type { ActionMsg, PieceView, PlacementMsg, Side, Square } from "./types";
-import { PIECE_INFO, PIECE_NAMES, PIECE_SHORT, UNKNOWN_INFO } from "./types";
+import {
+  PIECE_INFO,
+  PIECE_NAMES,
+  PIECE_SHORT,
+  PIECE_VALUE,
+  UNKNOWN_INFO,
+  shipName,
+} from "./types";
+import { PieceArt } from "./PieceArt";
+
+function MiniCard({
+  type,
+  owner,
+  pieceId,
+  faceDown = false,
+  sunk = false,
+}: {
+  type: string | null;
+  owner: Side;
+  pieceId?: string;
+  faceDown?: boolean;
+  sunk?: boolean;
+}) {
+  const shown = faceDown ? null : type;
+  const name = faceDown
+    ? "?"
+    : shipName(type, pieceId) ?? (type ? PIECE_NAMES[type] : "Unknown ship");
+  const value = shown ? PIECE_VALUE[shown] : null;
+  return (
+    <div className={`mini-card${sunk ? " battle-sunk" : ""}`}>
+      <div className={`mini-band band-${owner}`}>
+        <span>{name}</span>
+        <span>{value ?? ""}</span>
+      </div>
+      <PieceArt type={shown} owner={owner} />
+    </div>
+  );
+}
 
 export default function App() {
   const [joined, setJoined] = useState<{
@@ -250,7 +287,7 @@ function Game({
         {(() => {
           const p = inspect ? pieces.find((x) => x.id === inspect) : null;
           return p && p.square ? (
-            <PieceCard type={p.type} owner={p.owner} carrying={p.carrying} />
+            <PieceCard type={p.type} owner={p.owner} pieceId={p.id} carrying={p.carrying} />
           ) : null;
         })()}
         <Casualties sunk={sunk} you={state.you} />
@@ -339,20 +376,6 @@ function BattleOverlay({
           ? `${label(aType)} is sunk!`
           : "No effect — both remain on station.";
 
-  function chip(piece: PieceView | undefined, type: string | null, fate: string | undefined) {
-    const revealed = stage >= 1;
-    const sunk = stage >= 2 && fate === "sunk";
-    return (
-      <span
-        className={`chip chip-${piece?.owner ?? "a"} battle-chip${
-          sunk ? " battle-sunk" : ""
-        }`}
-      >
-        {revealed && type ? PIECE_SHORT[type] : "?"}
-      </span>
-    );
-  }
-
   return (
     <div
       className="battle-backdrop"
@@ -363,12 +386,21 @@ function BattleOverlay({
           {hazard ? "MINED!" : "ATTACK!"}
         </div>
         <div className="battle-row">
-          {chip(attacker, aType, aFate)}
-          <span className="battle-vs">{hazard ? "✸" : "⚔"}</span>
-          {chip(defender, dType, dFate)}
-        </div>
-        <div className="battle-names">
-          {stage >= 1 ? `${label(aType)} — ${label(dType)}` : " "}
+          <MiniCard
+            type={aType}
+            owner={attacker?.owner ?? "a"}
+            pieceId={battle.attackerId}
+            faceDown={stage < 1}
+            sunk={stage >= 2 && aFate === "sunk"}
+          />
+          <span className="battle-vs">{hazard ? "\u2738" : "\u2694"}</span>
+          <MiniCard
+            type={dType}
+            owner={defender?.owner ?? "b"}
+            pieceId={battle.defenderId}
+            faceDown={stage < 1}
+            sunk={stage >= 2 && dFate === "sunk"}
+          />
         </div>
         <div className="battle-outcome">{stage >= 2 ? outcome : " "}</div>
       </div>
@@ -383,20 +415,23 @@ function label(type: string | null | undefined): string {
 function PieceCard({
   type,
   owner,
+  pieceId,
   carrying = [],
 }: {
   type: string | null;
   owner: Side;
+  pieceId?: string;
   carrying?: Side[];
 }) {
+  const named = shipName(type, pieceId);
   return (
     <div className="piece-card">
-      <div className="piece-card-head">
-        <span className={`chip chip-${owner}`}>
-          {type ? PIECE_SHORT[type] : "?"}
-        </span>
-        <strong>{type ? PIECE_NAMES[type] : "Unknown ship"}</strong>
-      </div>
+      <MiniCard type={type} owner={owner} pieceId={pieceId} />
+      {named && type && (
+        <div className="piece-card-head">
+          <strong>{PIECE_NAMES[type]}</strong>
+        </div>
+      )}
       <p>{type ? PIECE_INFO[type] : UNKNOWN_INFO}</p>
       {carrying.length > 0 && (
         <p>

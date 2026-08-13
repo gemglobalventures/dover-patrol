@@ -414,3 +414,42 @@ button.ghost {
   margin: 0.35em 0 0;
   opacity: 0.92;
 }
+
+.mini-card {
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  border-radius: 3px;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+  background: #f5f2e8;
+  transition: opacity 0.4s, transform 0.4s;
+}
+.mini-band {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.6em;
+  padding: 0.15em 0.55em;
+  font-family: "Gill Sans", "Trebuchet MS", sans-serif;
+  font-weight: bold;
+  font-size: 0.72em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.band-a {
+  background: var(--blue-deep);
+}
+.band-b {
+  background: var(--red-deep);
+}
+.piece-art {
+  display: block;
+  width: 100%;
+}
+.battle-row .mini-card {
+  width: 185px;
+  flex-shrink: 0;
+}
+.piece-card .mini-card {
+  margin-bottom: 0.5em;
+}
