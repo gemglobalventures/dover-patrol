@@ -64,9 +64,15 @@ Then in two terminals:
 cd packages/client && npm run dev -- --host
 ```
 
-Open http://localhost:5173 on two devices (or two tabs), pick the same room
-name and opposite sides. Run the tests with `./.venv/bin/pytest packages`
-(add `pytest` and `httpx` to the venv for the server suite).
+Open http://localhost:5173 on the host, and `http://<host-LAN-IP>:5173` on
+any other computer, iPad or phone on the same network (find the IP with
+`ipconfig getifaddr en0`). Pick the same room name and opposite sides — the
+Vite dev server proxies the WebSocket to the game server, so only port 5173
+needs to be reachable. The layout is responsive: full-height board on a
+desktop, board-above-panel on phones and portrait tablets.
+
+Run the tests with `./.venv/bin/pytest packages` (add `pytest` and `httpx`
+to the venv for the server suite).
 
 ## Planned architecture
 
