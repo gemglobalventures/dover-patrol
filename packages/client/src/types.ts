@@ -54,6 +54,7 @@ export type ServerMsg =
   | { type: "setup_proposal"; placements: PlacementMsg[] }
   | { type: "state"; state: ClientState }
   | { type: "events"; events: GameEvent[] }
+  | { type: "reset" }
   | { type: "error"; reason: string };
 
 export const PIECE_NAMES: Record<string, string> = {

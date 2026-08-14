@@ -140,3 +140,25 @@ def test_ai_room_rejects_second_human():
             with client.websocket_connect("/ws/bots/b") as ws_b:
                 err = drain_until(ws_b, "error")
                 assert "computer" in err["reason"].lower()
+
+
+def test_reset_returns_room_to_setup_and_replays():
+    with TestClient(app) as client, game(client) as (ws_a, ws_b, state_a, state_b):
+        mover, mover_state, other = whoever_moves(ws_a, ws_b, state_a, state_b)
+        move = next(a for a in mover_state["legal_actions"] if a["type"] == "move")
+        mover.send_json(move)
+        drain_until(mover, "state")
+        drain_until(other, "state")
+
+        ws_a.send_json({"type": "reset"})
+        drain_until(ws_a, "reset")
+        drain_until(ws_b, "reset")
+        status = drain_until(ws_a, "room_status")
+        assert status["phase"] == "setup"
+        assert status["setup_done"] == {"a": False, "b": False}
+
+        do_setup(ws_a)
+        do_setup(ws_b)
+        new_a = drain_until(ws_a, "state")["state"]
+        assert new_a["winner"] is None
+        assert len([p for p in new_a["pieces"] if p["square"] is not None]) == 48

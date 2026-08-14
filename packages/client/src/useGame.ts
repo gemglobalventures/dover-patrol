@@ -38,6 +38,7 @@ export interface GameConnection {
   lastAction: LastAction | null;
   dismissBattle: () => void;
   requestShuffle: () => void;
+  requestReset: () => void;
   submitSetup: (placements: PlacementMsg[]) => void;
   sendAction: (a: ActionMsg) => void;
 }
@@ -152,6 +153,17 @@ export function useGame(
           if (from.length || to.length) setLastAction({ from, to });
           break;
         }
+        case "reset":
+          stateRef.current = null;
+          setState(null);
+          setPhase("setup");
+          setProposal(null);
+          setLog([]);
+          setBattles([]);
+          setLastAction(null);
+          setError(null);
+          ws.send(JSON.stringify({ type: "random_setup" }));
+          break;
         case "error":
           setError(msg.reason);
           break;
@@ -177,6 +189,7 @@ export function useGame(
     lastAction,
     dismissBattle: useCallback(() => setBattles((old) => old.slice(1)), []),
     requestShuffle: useCallback(() => send({ type: "random_setup" }), [send]),
+    requestReset: useCallback(() => send({ type: "reset" }), [send]),
     submitSetup: useCallback(
       (placements: PlacementMsg[]) => send({ type: "setup", placements }),
       [send]

@@ -81,6 +81,13 @@ class Room:
             return "setup"
         return "over" if self.state.winner is not None else "play"
 
+    def reset(self) -> None:
+        """Abandon any running game and return the room to the setup phase."""
+        self.state = None
+        self.placements = {Player.A: None, Player.B: None}
+        self.moved_ids = set()
+        self.agent = None  # a fresh admiral with a fresh memory
+
     def submit_setup(self, player: Player, placements: Placements) -> None:
         if self.state is not None:
             raise SetupError("the game has already started")

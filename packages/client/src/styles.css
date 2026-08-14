@@ -526,3 +526,9 @@ button.ghost {
     min-width: 170px;
   }
 }
+
+.room-controls {
+  margin-top: 0.9em;
+  padding-top: 0.6em;
+  border-top: 1px solid var(--line);
+}

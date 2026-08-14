@@ -146,6 +146,10 @@ async def _handle_message(room: Room, player: Player, ws: WebSocket, data: dict)
             await ws.send_json(
                 {"type": "setup_proposal", "placements": placements_to_json(placements)}
             )
+        elif kind == "reset":
+            room.reset()
+            await _broadcast(room, {"type": "reset"})
+            await _room_status(room)
         elif kind == "setup":
             room.submit_setup(player, placements_from_json(data["placements"]))
             if room.ai and room.placements[Player.B] is None:

@@ -51,7 +51,7 @@ export default function App() {
   } | null>(null);
 
   if (!joined) return <JoinScreen onJoin={setJoined} />;
-  return <Game {...joined} />;
+  return <Game {...joined} onLeave={() => setJoined(null)} />;
 }
 
 function JoinScreen({
@@ -140,17 +140,35 @@ function Game({
   mode,
   ai,
   recall,
+  onLeave,
 }: {
   room: string;
   side: Side;
   mode: string;
   ai: boolean;
   recall: number;
+  onLeave: () => void;
 }) {
   const game = useGame(room, side, mode, ai, recall);
   const [selected, setSelected] = useState<string | null>(null);
   const [inspect, setInspect] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);
+
+  // A room reset drops us back to the setup phase: clear stale selections.
+  useEffect(() => {
+    if (game.phase === "setup") {
+      setSelected(null);
+      setInspect(null);
+      setDialog(null);
+    }
+  }, [game.phase]);
+
+  function confirmNewGame() {
+    const running = game.state !== null && game.state.winner === null;
+    if (!running || window.confirm("Abandon this game and start a new one?")) {
+      game.requestReset();
+    }
+  }
 
   const state = game.state;
   const myTurn = state !== null && state.to_move === state.you && state.winner === null;
@@ -166,7 +184,7 @@ function Game({
   }, [state]);
 
   if (game.phase === "setup") {
-    return <SetupScreen side={side} mode={mode} game={game} />;
+    return <SetupScreen side={side} mode={mode} game={game} onLeave={onLeave} />;
   }
   if (!state) return <div className="join"><h1>Connecting…</h1></div>;
 
@@ -299,6 +317,14 @@ function Game({
           {game.log.slice().reverse().map((line, i) => (
             <div key={game.log.length - i}>{line}</div>
           ))}
+        </div>
+        <div className="room-controls">
+          <button onClick={confirmNewGame}>
+            {state.winner ? "Play again" : "New game"}
+          </button>
+          <button className="ghost" onClick={onLeave}>
+            Leave room
+          </button>
         </div>
       </div>
       <div className="board-wrap">
@@ -471,10 +497,12 @@ function SetupScreen({
   side,
   mode,
   game,
+  onLeave,
 }: {
   side: Side;
   mode: string;
   game: ReturnType<typeof useGame>;
+  onLeave: () => void;
 }) {
   const [placed, setPlaced] = useState<PlacementMsg[]>([]);
   const [selectedType, setSelectedType] = useState<string | null>(null);
@@ -616,6 +644,11 @@ function SetupScreen({
         {selectedType && <PieceCard type={selectedType} owner={side} />}
         <div className="you">
           Opponent {game.setupDone[side === "a" ? "b" : "a"] ? "is ready" : "still arranging"}.
+        </div>
+        <div className="room-controls">
+          <button className="ghost" onClick={onLeave}>
+            Leave room
+          </button>
         </div>
       </div>
       <div className="board-wrap">
