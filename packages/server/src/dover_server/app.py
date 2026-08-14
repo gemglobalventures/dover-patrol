@@ -8,8 +8,10 @@ from dover_engine.engine import IllegalAction, apply_action
 from dover_engine.state import SetupError
 from dover_engine.types import Player
 
+from .persist import load_room, save_room
 from .projection import parse_action, project, serialize_event
 from .rooms import Room, placements_from_json, placements_to_json, random_placements
+from .strategy import strategic_placements
 
 app = FastAPI(title="Dover Patrol")
 
@@ -51,6 +53,7 @@ async def _bot_turn(room: Room) -> None:
         action = await asyncio.to_thread(agent.choose, room.state, room.moved_ids)
         room.state, events = apply_action(room.state, action)
         _track_moves(room, events)
+        save_room(room)
         await _broadcast(
             room,
             {"type": "events", "events": [serialize_event(e) for e in events]},
@@ -87,15 +90,15 @@ async def game_socket(
         await ws.close()
         return
     player = Player(side)
-    room = rooms.setdefault(
-        room_id,
-        Room(
+    room = rooms.get(room_id)
+    if room is None:
+        room = load_room(room_id) or Room(
             room_id=room_id,
             mode=mode,
             ai=bool(ai),
             ai_params={"samples": ai_samples, "depth": ai_depth, "recall": recall},
-        ),
-    )
+        )
+        rooms[room_id] = room
     if room.ai and player is Player.B:
         await ws.send_json(
             {"type": "error", "reason": "this room's Red side is the computer"}
@@ -142,20 +145,22 @@ async def _handle_message(room: Room, player: Player, ws: WebSocket, data: dict)
     kind = data.get("type")
     try:
         if kind == "random_setup":
-            placements = random_placements(room.mode, player, room.rng)
+            placements = strategic_placements(room.mode, player, room.rng)
             await ws.send_json(
                 {"type": "setup_proposal", "placements": placements_to_json(placements)}
             )
         elif kind == "reset":
             room.reset()
+            save_room(room)
             await _broadcast(room, {"type": "reset"})
             await _room_status(room)
         elif kind == "setup":
             room.submit_setup(player, placements_from_json(data["placements"]))
             if room.ai and room.placements[Player.B] is None:
                 room.submit_setup(
-                    Player.B, random_placements(room.mode, Player.B, room.rng)
+                    Player.B, strategic_placements(room.mode, Player.B, room.rng)
                 )
+            save_room(room)
             await _room_status(room)
             if room.state is not None:
                 await _send_states(room)
@@ -168,6 +173,7 @@ async def _handle_message(room: Room, player: Player, ws: WebSocket, data: dict)
             new_state, events = apply_action(room.state, parse_action(data))
             room.state = new_state
             _track_moves(room, events)
+            save_room(room)
             await _broadcast(
                 room,
                 {"type": "events", "events": [serialize_event(e) for e in events]},
